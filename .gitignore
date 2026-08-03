@@ -1,0 +1,9 @@
+# Claude Code machine-local overrides (settings.json IS tracked and shared)
+.claude/settings.local.json
+
+# Credentials — never commit. See deploy/runbook.md (D19).
+.env
+
+# Python
+__pycache__/
+*.py[cod]
