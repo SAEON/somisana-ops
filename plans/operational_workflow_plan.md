@@ -8,8 +8,8 @@ WW3 and OpenDrift.
 D1–D19 (§2) are settled. No blocking questions remain; §4 lists what is deferred to
 implementation. §5 is the file-by-file skeleton, §6 the build order.
 
-**▶ Next step: Phase 1 of §6** — `ops/my_env.sh`, `ops/lib/`, `ops/combos_croco.txt`,
-`ops/.env.example`. Test by sourcing and printing the resolved banner for each of the 8
+**▶ Next step: Phase 1 of §6** — `my_env.sh`, `lib/`, `combos_croco.txt`,
+`.env.example`. Test by sourcing and printing the resolved banner for each of the 8
 rows: confirm `FDAYS` (5 / 2.45) and `CLIM_FILE` (set / empty) derive correctly, and that
 nothing leaks between rows.
 
@@ -100,10 +100,10 @@ jobs:
       OGCM:   ${{ inputs.OGCM }}
       BLK:    ${{ inputs.BLK }}
     steps:
-      - run: bash ops/croco_ops/pipeline.sh
+      - run: bash croco_ops/pipeline.sh
 ```
 
-The leaf is a one-step workflow, so `bash ops/croco_ops/pipeline.sh` with the same env
+The leaf is a one-step workflow, so `bash croco_ops/pipeline.sh` with the same env
 vars is byte-identical behaviour at a prompt. **That property is the point of the
 redesign.**
 
@@ -114,7 +114,7 @@ execution engine and the record.
 
 ```
 systemd timer (Persistent=true)
-  └─ ops/dispatch/dispatch.sh
+  └─ dispatch/dispatch.sh
        ├─ compute RUN_DATE(s) in play
        ├─ for each candidate: work to do? resource free?
        └─ gh workflow run <wf>.yml -f RUN_DATE=... -f DOMAIN=... ...
@@ -320,7 +320,7 @@ and by a local `run_all_combos.sh` (to run them in series at a prompt) — the s
 so the two cannot disagree about what is operational:
 
 ```
-# ops/combos_croco.txt  — the operational matrix; one row = one run
+# combos_croco.txt  — the operational matrix; one row = one run
 # DOMAIN          OGCM      BLK
 sa_west_02        MERCATOR  GFS
 sa_west_02        MERCATOR  SAWS
@@ -340,7 +340,7 @@ property of sa_west), not of the combination — and `my_env.sh` already derives
 Testing one combo needs no file at all:
 
 ```bash
-DOMAIN=sa_west_02 OGCM=MERCATOR BLK=SAWS bash ops/croco_ops/run_croco.sh
+DOMAIN=sa_west_02 OGCM=MERCATOR BLK=SAWS bash croco_ops/run_croco.sh
 ```
 
 #### ⚠ ONE FRESH PROCESS PER COMBO — a hard invariant
@@ -351,8 +351,8 @@ and exports silently contaminates later combos:
 ```bash
 for BLK in GFS SAWS; do
   export BLK
-  source ops/my_env.sh      # FDAYS="${FDAYS:-5}" … then SAWS wants 2.45
-  bash ops/croco_ops/run_croco.sh
+  source my_env.sh      # FDAYS="${FDAYS:-5}" … then SAWS wants 2.45
+  bash croco_ops/run_croco.sh
 done
 ```
 
@@ -366,7 +366,7 @@ derived path.
 leaves the parent shell untouched:
 
 ```bash
-DOMAIN="$d" OGCM="$o" BLK="$b" bash ops/croco_ops/pipeline.sh
+DOMAIN="$d" OGCM="$o" BLK="$b" bash croco_ops/pipeline.sh
 ```
 
 In production this is free — each combo is its own Actions job (D1), hence its own
@@ -531,7 +531,7 @@ appears, which is strictly better than today's fixed 03:00 cron that fires once 
 
 **The dispatcher only ever works on the current cycle**, retrying continuously for ~24 h
 until `RUN_DATE` rolls over. Missed cycles are not automatically backfilled;
-`RUN_DATE=20260801_00 bash ops/…` does it by hand.
+`RUN_DATE=20260801_00 bash …` does it by hand.
 
 Rationale:
 - Backfill would repair problems already mitigated by design — a truncated `latest`
@@ -673,13 +673,13 @@ bottom).
 
 ### D19 — Credentials live in `.env` on the hosts, not in GitHub secrets
 
-`ops/.env`, `chmod 600`, gitignored, sourced by the scripts (`oceanmotion`'s pattern).
+`.env`, `chmod 600`, gitignored, sourced by the scripts (`oceanmotion`'s pattern).
 **GitHub Actions carries no secrets at all** — the runner *is* the box, so it reads the
 same file.
 
 The deciding reason: **if credentials come from GitHub secrets, a hand-run script has
 none.** The entire premise of this rewrite is that
-`RUN_DATE=… bash ops/download/download_MERCATOR.sh` behaves identically at a prompt and on
+`RUN_DATE=… bash download/download_MERCATOR.sh` behaves identically at a prompt and on
 the runner; GitHub secrets break that for precisely the stage that is flakiest and most in
 need of manual testing. Secondary: credentials never transit GitHub and cannot leak into
 workflow logs.
@@ -696,7 +696,7 @@ needs a credential file anyway for `gh auth`, so this adds no new *kind* of thin
 manage.
 
 **Accepted cost:** two `.env` files on two hosts rather than one GitHub secrets page, so
-rotation is a two-place operation with no UI. That is what `ops/deploy/runbook.md` is for.
+rotation is a two-place operation with no UI. That is what `deploy/runbook.md` is for.
 
 ### D20 — A `latest` for the downloaded forcing too (public-facing, SAWS excluded)
 
@@ -912,7 +912,7 @@ the code:
   `somisana_safe` is long-term. All the network-mount hardening in today's `cleanup.yml`
   (30-min step timeout, `timeout -k 10 90 rm -rf`, warn-don't-fail per directory) carries
   over unchanged — it exists for good reasons.
-- **`gh` CLI + systemd install steps** — these belong in `ops/deploy/runbook.md`.
+- **`gh` CLI + systemd install steps** — these belong in `deploy/runbook.md`.
 - **WW3 / OpenDrift combos tables** — deferred to those phases. The structure absorbs them
   (a second table, a second dispatch rule, sharing `model.lock`); the one known
   prerequisite is the `croco_srf_2_ww3` change recorded in D18.
@@ -924,56 +924,55 @@ the code:
 ```
 somisana-ops/
 ├── README.md
-├── .gitignore                        # ops/.env, __pycache__
+├── .gitignore                        # .env, __pycache__
+├── my_env.sh                         # ALL defaults for ONE run; derives FDAYS, CLIM_FILE,
+│                                     #   RUN_NAME, paths (D11)
+├── .env.example                      # real .env is gitignored, chmod 600 (D19)
+├── combos_croco.txt                  # the operational matrix, 8 rows (D11)
+├── run_all_combos.sh                 # local convenience: loop the table,
+│                                     #   ONE FRESH PROCESS PER ROW (D11)
+├── lib/
+│   ├── common.sh                     # set -euo pipefail, logging, resolved-env banner
+│   ├── lock.sh                       # flock helpers: model / postprocess / per-source
+│   └── gates.sh                      # is_done() / inputs_ready() predicates — shared by
+│                                     #   dispatch, the pipelines AND check_cycle (D16)
+├── dispatch/
+│   ├── dispatch.sh                   # the only orchestration logic (D2, D15)
+│   ├── sync_repos.sh                 # git pull the OTHER repos, once per cycle (D22)
+│   └── check_cycle.sh                # 12:00 completeness assertion (D16)
+├── download/
+│   ├── download_GFS.sh
+│   ├── download_SAWS.sh              # reformat, not download; needs GFS first (D14)
+│   ├── download_MERCATOR.sh          # runs on saeonapps
+│   ├── collect_MERCATOR.sh           # mims3-side copy from the shared mount
+│   └── download_HYCOM.sh
+├── croco_ops/
+│   ├── pipeline.sh                   # gate → compile → tides → bry/ini → run → archive
+│   ├── compile.sh                    # per-domain flock (D12)
+│   ├── make_tides.sh
+│   ├── make_bry_ini.sh
+│   ├── run_croco.sh                  # restart search incl. ${OGCM}_GFS fallback (D13)
+│   └── archive.sh                    # → YYYYMMDD_HH/croco_avg_frcst.nc, size-checked (D4)
+├── postprocess/
+│   ├── pipeline.sh                   # gate → build_latest → regrid → plots → anomalies
+│   │                                 #   → publish
+│   ├── build_latest.sh               # backward walk with gap-stop (D8, D9)
+│   ├── build_latest_downloads.sh     # forcing latest — ONCE per cycle, not per combo (D20)
+│   ├── concat_latest.py              # ported from oceanmotion + the gap-stop it lacks
+│   ├── regrid.sh                     # tier1/2/3
+│   ├── plots.sh                      # crocplot × 3
+│   ├── anomalies.sh                  # sa-west only (CLIM_FILE set)
+│   └── publish_latest.sh             # rsync local latest → ocims mount
+├── cleanup/
+│   └── cleanup.sh                    # likely grows: local / ocims archive / saeon mount
+├── deploy/
+│   ├── runbook.md                    # gh auth, .env, systemd install, rotation
+│   └── systemd/
+│       ├── somisana_dispatch.service
+│       ├── somisana_dispatch.timer   # Persistent=true (D2)
+│       └── install_units.sh
 ├── plans/
 │   └── operational_workflow_plan.md  # this file
-├── ops/
-│   ├── my_env.sh                     # ALL defaults for ONE run; derives FDAYS, CLIM_FILE,
-│   │                                 #   RUN_NAME, paths (D11)
-│   ├── .env.example                  # real .env is gitignored, chmod 600 (D19)
-│   ├── combos_croco.txt              # the operational matrix, 8 rows (D11)
-│   ├── run_all_combos.sh             # local convenience: loop the table,
-│   │                                 #   ONE FRESH PROCESS PER ROW (D11)
-│   ├── lib/
-│   │   ├── common.sh                 # set -euo pipefail, logging, resolved-env banner
-│   │   ├── lock.sh                   # flock helpers: model / postprocess / per-source
-│   │   └── gates.sh                  # is_done() / inputs_ready() predicates — shared by
-│   │                                 #   dispatch, the pipelines AND check_cycle (D16)
-│   ├── dispatch/
-│   │   ├── dispatch.sh               # the only orchestration logic (D2, D15)
-│   │   ├── sync_repos.sh             # git pull the OTHER repos, once per cycle (D22)
-│   │   └── check_cycle.sh            # 12:00 completeness assertion (D16)
-│   ├── download/
-│   │   ├── download_GFS.sh
-│   │   ├── download_SAWS.sh          # reformat, not download; needs GFS first (D14)
-│   │   ├── download_MERCATOR.sh      # runs on saeonapps
-│   │   ├── collect_MERCATOR.sh       # mims3-side copy from the shared mount
-│   │   └── download_HYCOM.sh
-│   ├── croco_ops/
-│   │   ├── pipeline.sh               # gate → compile → tides → bry/ini → run → archive
-│   │   ├── compile.sh                # per-domain flock (D12)
-│   │   ├── make_tides.sh
-│   │   ├── make_bry_ini.sh
-│   │   ├── run_croco.sh              # restart search incl. ${OGCM}_GFS fallback (D13)
-│   │   └── archive.sh                # → YYYYMMDD_HH/croco_avg_frcst.nc, size-checked (D4)
-│   ├── postprocess/
-│   │   ├── pipeline.sh               # gate → build_latest → regrid → plots → anomalies
-│   │   │                             #   → publish
-│   │   ├── build_latest.sh           # backward walk with gap-stop (D8, D9)
-│   │   ├── build_latest_downloads.sh # forcing latest — ONCE per cycle, not per combo (D20)
-│   │   ├── concat_latest.py          # ported from oceanmotion + the gap-stop it lacks
-│   │   ├── regrid.sh                 # tier1/2/3
-│   │   ├── plots.sh                  # crocplot × 3
-│   │   ├── anomalies.sh              # sa-west only (CLIM_FILE set)
-│   │   └── publish_latest.sh         # rsync local latest → ocims mount
-│   ├── cleanup/
-│   │   └── cleanup.sh
-│   └── deploy/
-│       ├── runbook.md                # gh auth, .env, systemd install, rotation
-│       └── systemd/
-│           ├── somisana_dispatch.service
-│           ├── somisana_dispatch.timer   # Persistent=true (D2)
-│           └── install_units.sh
 └── .github/workflows/
     ├── download_gfs.yml
     ├── download_saws.yml
@@ -1007,7 +1006,7 @@ promise that the completeness check is *the same logic inverted* only holds if t
 literally one implementation.
 
 **`run_all_combos.sh` is where the D11 invariant is easiest to break.** It must invoke a
-fresh process per row (`DOMAIN=… OGCM=… BLK=… bash ops/croco_ops/pipeline.sh`), never
+fresh process per row (`DOMAIN=… OGCM=… BLK=… bash croco_ops/pipeline.sh`), never
 `source` in a loop.
 
 ---
