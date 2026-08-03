@@ -17,9 +17,22 @@
 #      plain `[ -f ]` check forever.
 
 # is_done <path> — plain presence gate, for local stage outputs written atomically
-# (scratch/ then mv into place) — D4's rule 2 doesn't apply to these.
+# (scratch/ then mv into place) — D4's rule 2 doesn't apply to these in the rsync
+# sense. But crocotools_py's reformat functions write straight to the final filename
+# (`ds.to_netcdf(fname_out)`, no temp-then-rename) rather than via scratch/, so a
+# process killed mid-write leaves a real 0-byte or partial file at that path — the
+# same class of trap D4's rsync rule exists for, just via a different write pattern.
+# `[ -s ]` (exists AND non-empty) catches the 0-byte case for free at zero extra cost
+# — confirmed against a real reproduction on mims3, 2026-08-03 (a killed SAWS reformat
+# left an empty file that a plain `[ -f ]` would have read as "done" forever).
+#
+# ⚠ Residual gap: this does NOT catch a file that was killed after writing SOME real
+# bytes but before finishing — a non-empty-but-truncated netCDF. Closing that fully
+# would need real content validation (e.g. opening the file), which is a meaningfully
+# heavier check to run on every gate lookup. Accepted for now; revisit if a truncated
+# (not just empty) forcing file is ever actually seen in production.
 is_done() {
-  [ -f "$1" ]
+  [ -s "$1" ]
 }
 
 # archived <src> <dst> — the archive gate (D4): dst must exist AND match src's size.
@@ -36,4 +49,20 @@ archived() {
 newer_than() {
   local a="$1" b="$2"
   [ -f "$a" ] && [ "$a" -nt "$b" ]
+}
+
+# all_done <dir> <var1> [var2 ...] — true iff every "${dir}/${var}_Y9999M1.nc" exists.
+#
+# ⚠ Confirmed the hard way on mims3 (2026-08-03): a reformat step that writes one file
+# per variable can be killed partway through, leaving an early variable's file
+# complete while later ones are still missing. Gating on a SINGLE sentinel file from
+# a multi-file output is D4's truncated-file trap wearing a different hat — a partial
+# run's first-written file passes `[ -f ]` forever and gets read back as "done".
+# Always gate multi-file reformat output on the WHOLE expected set, not one name.
+all_done() {
+  local dir="$1"; shift
+  local v
+  for v in "$@"; do
+    is_done "${dir}/${v}_Y9999M1.nc" || return 1
+  done
 }
