@@ -11,6 +11,12 @@ repo wiki.
 
 ## 1. GitHub CLI (`gh`) setup
 
+> **✅ Already done on `mims3` (croco.fearon.alma.10), confirmed 2026-08-03.** `gh` 2.97.0
+> is installed at `/bin/gh`, authenticated as `GilesFearon` under the `somisana` user, with
+> all three scopes (`repo`, `workflow`, `read:org`), `hosts.yml` at `600`. The steps below
+> are kept as reference for re-authentication, rotation (§1.6), or setting up a second host
+> — not as a pending task here.
+
 ### Why `gh` is needed
 
 Two things on the server must authenticate to GitHub:
@@ -220,7 +226,12 @@ clone under `/home/giles/`.
 ## 2. Still to document
 
 - systemd unit installation (`deploy/systemd/`) — Phase 5
-- conda environments and their provenance (`somisana_croco`, the download env)
-- the passwordless `sudo` allowlist for `somisana` (`sudo -l`) that the archive steps rely on
+- conda environments: **existence and names confirmed** 2026-08-03 — `somisana_croco` and
+  `download` both present (`conda env list`). Provenance (how each was built) still
+  undocumented.
+- the passwordless `sudo` allowlist for `somisana` (`sudo -l`) that the archive steps rely
+  on — not yet checked on this host; `sudo -n crontab -l -u somisana` already confirmed
+  `somisana`'s own sudo needs a password (no passwordless entry for that command), so the
+  archive-step allowlist should not be assumed
 - `.env` contents and rotation for `COPERNICUS_USERNAME` / `PASSWORD` on `saeonapps` (D19)
 - test-vs-live root overrides for bring-up (D23)

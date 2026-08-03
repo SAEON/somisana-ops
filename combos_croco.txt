@@ -1,0 +1,17 @@
+# combos_croco.txt — the operational matrix; one row = one run (D11).
+#
+# Read by both dispatch.sh (to fire 8 workflows) and run_all_combos.sh (to run them
+# in series at a prompt) — the same table, so the two cannot disagree about what is
+# operational. FDAYS and CLIM_FILE are NOT columns here — they are derived inside
+# my_env.sh from BLK / DOMAIN, since they are properties of those, not of the
+# combination (D11).
+#
+# DOMAIN          OGCM      BLK
+sa_west_02        MERCATOR  GFS
+sa_west_02        MERCATOR  SAWS
+sa_west_02        HYCOM     GFS
+sa_west_02        HYCOM     SAWS
+sa_southeast_01   MERCATOR  GFS
+sa_southeast_01   MERCATOR  SAWS
+sa_southeast_01   HYCOM     GFS
+sa_southeast_01   HYCOM     SAWS

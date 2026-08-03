@@ -876,9 +876,28 @@ MPI decomposition in the test `.env`.
 
 ## 3. Established facts
 
-- **Host:** `mims3`, **4 self-hosted runners** registered.
-- **Cycle frequency:** 1/day (unchanged).
-- `gh` CLI **not** currently installed on `mims3`.
+- **Host:** self-hosted runners are named `mims3-runner_*`, but the box's actual
+  `hostname` is `croco.fearon.alma.10` (confirmed 2026-08-03, AlmaLinux 10). Same
+  machine — likely renamed during an OS upgrade — but worth knowing the two names
+  don't match if you're cross-referencing against anything that keys off `hostname`.
+- **Runners: 5 croco + 4 already-running OpenDrift, not 4.** Confirmed via
+  `systemctl list-units`: `mims3-runner_croco1`–`croco5` (against
+  `SAEON/somisana-croco`) plus `mims3-runner_od1`–`od4` (against
+  `SAEON/somisana-opendrift`). OpenDrift is not hypothetical future work — it has its
+  own operational pipeline running today (public-facing OpenDrift output on
+  `ocims-somisana` dates back to 2023). D1/D2's "one runner busy, 3 free" concurrency
+  reasoning was sized against 4 croco runners — recheck against 5 when Phase 5 lands.
+  124 physical cores total (`nproc`), so the 114-vs-120 headroom in §7.4 is unaffected.
+- **Cycle frequency:** 1/day (unchanged). Confirmed live: `/home/somisana/ops/main/`
+  has one `YYYYMMDD_00/` directory per day through today (2026-08-03), ~74 GB/cycle —
+  i.e. **the live system is running on this box right now**, which is exactly what
+  D23's parallel-roots isolation exists to protect.
+- **`gh` CLI is already installed and authenticated** (confirmed 2026-08-03, contradicts
+  the earlier assumption that it still needed setting up): `/bin/gh` v2.97.0, logged in
+  as `GilesFearon` under the `somisana` user, all three scopes (`repo`, `workflow`,
+  `read:org`) present, `~/.config/gh/hosts.yml` is `600`. `deploy/runbook.md` §1 is
+  therefore already done on this host — treat it as reference material for
+  re-authentication/rotation elsewhere, not a pending task.
 - `concat_latest.py` (`oceanmotion-models/ops/postprocess/`, 249 lines) is a good base —
   the fiddly time-encoding handling is already correct — but has **no gap detection**
   (sorts by time, concatenates latest-wins, trims to window at `:101,144,155`). The D8
@@ -1056,7 +1075,7 @@ workflows, which is authoritative for intent but not a guarantee the box still m
 
 | | |
 |---|---|
-| compute / runner | `mims3`, **4 self-hosted runners** |
+| compute / runner | `mims3`, **5 croco runners + 4 opendrift runners** (confirmed 2026-08-03; see §3) |
 | MERCATOR download | `saeonapps` runner (D14 — the hop stays) |
 | runner group / perms | `chown -R :runners`, `chmod -R 775` (used throughout today) |
 
@@ -1067,8 +1086,8 @@ workflows, which is authoritative for intent but not a guarantee the box still m
 | `CROCO_REPO` | `/home/somisana/code/somisana-croco` | `run_ops_server.yml` |
 | conda hook | `/home/somisana/miniforge3/etc/profile.d/conda.sh` | `make_bry_ini.yml` |
 | `CROCO_ENV` | `somisana_croco` | `make_bry_ini.yml` |
-| `DOWNLOAD_REPO` | `/home/somisana/code/somisana-download` *(assumed)* | exists on `mims3`; path not in any workflow — **confirm** |
-| `DOWNLOAD_ENV` | `download` *(assumed)* | exists on `mims3`; name not in any workflow — **confirm** |
+| `DOWNLOAD_REPO` | `/home/somisana/code/somisana-download` | **confirmed** 2026-08-03 (directory present, has `cli.py`); path not in any workflow, so this repo is the source of truth now |
+| `DOWNLOAD_ENV` | `download` | **confirmed** 2026-08-03 (`conda env list`, alongside `somisana_croco`) |
 | `OPS_REPO` | `/home/somisana/code/somisana-ops` | **new** — persistent clone; workflows run from here, not a checkout workspace (D22) |
 | `CROCO_SOURCE` | `/home/$USER/code/croco-v1.3.1/OCEAN/` | `configs/*/croco_v1.3.1/myenv_frcst.sh` |
 | `TPXO_DATA_DIR` | `/home/somisana/data/TPXO10` | `make_tides.yml` (`/home/somisana/data/${TIDE_FRC}`) |
@@ -1178,12 +1197,24 @@ MERCATOR at 5 days, `somisana_safe` long-term. Local `DATA_DIR` goes 5 → **8**
 Memory hints from today's docker flags: tier2 `35g`, tier3 `10g`, plots `10g`, all
 `--cpus=1`.
 
-### 7.9 Still to confirm on the box
+### 7.9 Confirmed on the box (2026-08-03)
 
-- **`DOWNLOAD_REPO` path and `DOWNLOAD_ENV` name.** Both exist on `mims3` but appear in no
-  workflow (D21 moves GFS/HYCOM off Docker onto them), so the values in §7.2 are inferred
-  from naming convention — `conda env list` and check `/home/somisana/code/`.
-- Exact `DATA_DIR` root and free space (D10 sizing ≈ 270 GB for 8 days).
-- Whether `/home/somisana/data/TPXO10` is still the TPXO location.
-- That the `.env` values in §7.2 match reality — several are inferred from workflow YAML,
-  not observed.
+All items below were open questions when this plan was written on another machine; this
+session's first login to the deployment box resolved them directly.
+
+- **`DOWNLOAD_REPO` and `DOWNLOAD_ENV` confirmed** — `/home/somisana/code/somisana-download`
+  exists (has `cli.py`), and the `download` conda env exists alongside `somisana_croco`
+  (`conda env list`). §7.2 values are correct, no longer assumed.
+- **`DATA_DIR` free space confirmed adequate** — `/home` is a 4.0 T filesystem with 3.2 T
+  free (16% used), comfortably ahead of D10's ~270 GB / 8-day estimate. Note `somisana_safe`
+  (long-term archive, `/mnt/somisana_safe`) is at 82% used, 1.9 T free — fine today, worth
+  watching as retention accumulates.
+- **`/home/somisana/data/TPXO10` confirmed** as the TPXO location.
+- **All four mounts confirmed present and auto-mounting**: `/mnt/ocims-somisana`,
+  `/mnt/saeon-somisana`, `/mnt/saws-data`, `/mnt/somisana_safe` (all `autofs` + `cifs`,
+  active). `public-facing/` on `ocims-somisana` already contains `sa-west`,
+  `sa-southeast`, `sa-forcing` and `opendrift` — matching §7.6's expected layout.
+- **`gh` confirmed installed and authenticated** — see §3. `deploy/runbook.md` §1 does not
+  need re-running on this host.
+
+Nothing left outstanding from the original list above.
